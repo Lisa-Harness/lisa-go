@@ -1,0 +1,8 @@
+# Go sources must be LF on disk: gofmt (Go ≤1.25) rejects CRLF, and CI
+# checkouts otherwise get CRLF when core.autocrlf=true.
+*.go text eol=lf
+# Keep shell-compatible configs LF as well.
+*.yml text eol=lf
+*.yaml text eol=lf
+*.mod text eol=lf
+*.sum text eol=lf
