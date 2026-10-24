@@ -10,7 +10,8 @@ Two audiences, one language-neutral contract
 | Want to… | Use | Language |
 | --- | --- | --- |
 | Author packs, modes, operations, tools | `lisa-harness-sdk` (Python Pack SDK) | Python |
-| Write a first-party MCP server, or embed Lisa as a host | `github.com/Lisa-Harness/lisa-go` (Connector SDK) | Go |
+| Write a first-party MCP server | this repo, `cmd/<server>/` over `connector/<primitive>/` | Go |
+| Embed Lisa's MCP tool fleet in a Go app | this repo's host/embed side (planned; see [PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md)) | Go |
 
 ## Layout
 
@@ -39,5 +40,6 @@ and the Pack SDK remain the source of truth for domain logic and
 extensibility; this SDK never reimplements them.
 
 Remaining: register the binaries with a live Python runtime run
-(`mcp_servers.yaml` `runtime_kind: binary`), and the host/embed side of the
-SDK. Requires Go 1.22+.
+(`mcp_servers.yaml` `runtime_kind: binary`; owned by a parallel agent), and
+the host/embed side of the SDK — spec'd, deferred executable plan in
+[PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md). Requires Go 1.22+.
