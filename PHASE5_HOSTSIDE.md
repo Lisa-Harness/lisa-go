@@ -375,26 +375,27 @@ redesign is authorized by this porting work.
 
 ### Release gating for the provider pack (registration workstream)
 
-The spilled `pack/` (`lisa-pack-go-connectors`) and `release.yml` gate on
-repo facts, not code:
+Status as of 2026-10-24: the first three gates are satisfied — the repo is
+public, `v0.1.0` is tagged, and the release workflow published 12 binaries
+plus `checksums.txt`. The remaining gates:
 
-- **Visibility.** The pack auto-installs from
-  `git+https://github.com/Lisa-Harness/lisa-go.git` and the runtime
-  downloads release assets over unauthenticated HTTPS. This repo is
-  currently **private**; both flows fail for anyone outside the org until
-  the repo is public or the runtime supports authenticated installs.
-- **Tag pin.** `pack/README.md` and `pack/src/.../mcp_servers.yaml` pin
-  `v0.1.0`; no `v0.1.0` tag exists yet, and `release.yml` publishes only on
-  `v*.*.*` tags. The pinned download 404s until the tag is pushed.
 - **Asset coverage.** `release.yml` builds only `lisa-storage` and
   `lisa-thread`; the Go fetch server has no release asset, so it cannot be
   selected via `binary_download` today. Add it to the matrix before any
   fetch registration.
-- **Pack hygiene.** The pack must be committed before the runtime can
-  install it from this repo. Its tool contracts were verified against the
-  Go servers' published tools (storage 10/10, thread 6/6 after adding
-  `thread_task_view`); `capability_tools` must stay in sync with both the
-  host manifest's built-ins and the Go binaries' actual surface.
+- **Pack hygiene.** The pack must stay in sync with the Go servers'
+  published surface: `capability_tools`/`default_available_tools` were
+  verified against the host manifest's built-ins with the real Python
+  loader (storage 10/10, thread 6/6, ambient parity restored).
+- **Live validation.** `v0.1.0` was validated live from the public
+  release: `resolve_mcp_binary_configs` downloaded and SHA-256-verified the
+  assets, `MCPToolPool` warm-started both binaries, published capability
+  ids (`storage.*` / `thread.*`), and round-tripped real tool calls. The
+  pack installs from the public
+  `git+https://…@v0.1.0#subdirectory=pack` URL and its
+  `lisa.extensions.content_roots` entry point resolves with the manifest
+  shipped alongside. Re-run this live test on any future release tag
+  before the runtime fleet upgrades its pin.
 
 ## 10. Definition of done
 

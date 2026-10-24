@@ -41,14 +41,11 @@ runs the reference `ThreadReader` on identical fixtures. The Python framework
 and the Pack SDK remain the source of truth for domain logic and
 extensibility; this SDK never reimplements them.
 
-Remaining: publish the first `v0.1.0` release and validate the provider pack
-through a live Python runtime run; port the remaining first-party content,
-catalog, guard and memory servers; and implement the optional
-`lisa-mcp-broker` backend. The broker would consume Python-resolved
-configurations and own launch/MCP pool mechanics, selected through a
-runtime switch; turns, packs, policy and approvals stay Python. The revised
-scope, distribution requirements and verification gates (including the
-repo-visibility and tag-pin prerequisites for the provider pack) are in
-[PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md). These additions are **spec only**,
-not implemented. Standalone Go manifest loading and embedding are deferred.
-Requires Go 1.22+.
+Remaining: port the remaining first-party content, catalog, guard and
+memory servers; and implement the optional `lisa-mcp-broker` backend. The
+broker would consume Python-resolved configurations and own launch/MCP pool
+mechanics, selected through a runtime switch; turns, packs, policy and
+approvals stay Python. The revised scope, distribution requirements and
+verification gates are in [PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md). These
+additions are **spec only**, not implemented. Standalone Go manifest
+loading and embedding are deferred. Requires Go 1.22+.
