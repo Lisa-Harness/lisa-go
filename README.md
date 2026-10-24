@@ -11,7 +11,7 @@ Two audiences, one language-neutral contract
 | --- | --- | --- |
 | Author packs, modes, operations, tools | `lisa-harness-sdk` (Python Pack SDK) | Python |
 | Write a first-party MCP server | this repo, `cmd/<server>/` over `connector/<primitive>/` | Go |
-| Embed Lisa's MCP tool fleet in a Go app | this repo's host/embed side (planned; see [PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md)) | Go |
+| Delegate the Python runtime's MCP pool to a Go binary | optional broker backend (spec only; see [PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md)) | Python adapter + Go broker |
 
 ## Layout
 
@@ -20,13 +20,15 @@ connector/          Connector SDK: spawn, stdio MCP client, contract CLI/logging
 cmd/lisa-fetch/     Phase 1 pilot — lisa-fetch MCP server in Go
 cmd/lisa-storage/   Phase 2 — sandboxed storage backend
 cmd/lisa-thread/    Phase 2 — thread read path
+pack/               Installable Lisa pack for the storage/thread providers
 PROTOCOL.md         contract version this module implements
 ```
 
 The Connector SDK grew out of the `lisa-fetch` pilot: `cmd/lisa-fetch` proves
 the server-side API, then `connector/` is hardened and used to port
-`lisa-storage` and `lisa-thread`. A Go server needs **no kernel change** — the
-runtime's `binary` runtime kind spawns it directly.
+`lisa-storage` and `lisa-thread`. The Go provider pack declares these as
+`runtime_kind: binary`; the Python runtime downloads a pinned release asset,
+verifies its checksum, and caches it before launch.
 
 ## Status
 
@@ -39,7 +41,13 @@ runs the reference `ThreadReader` on identical fixtures. The Python framework
 and the Pack SDK remain the source of truth for domain logic and
 extensibility; this SDK never reimplements them.
 
-Remaining: register the binaries with a live Python runtime run
-(`mcp_servers.yaml` `runtime_kind: binary`; owned by a parallel agent), and
-the host/embed side of the SDK — spec'd, deferred executable plan in
-[PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md). Requires Go 1.22+.
+Remaining: publish the first `v0.1.0` release and validate the provider pack
+through a live Python runtime run; port the remaining first-party content,
+catalog, guard and memory servers; and implement the optional `lisa-mcp-broker`
+backend. The broker would consume
+Python-resolved configurations and own launch/MCP pool mechanics, selected
+through a runtime switch; turns, packs, policy and approvals stay Python.
+The revised scope, distribution requirements and verification gates are in
+[PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md). These additions are **spec only**,
+not implemented. Standalone Go manifest loading and embedding are deferred.
+Requires Go 1.22+.

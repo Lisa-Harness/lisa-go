@@ -1,0 +1,62 @@
+version: 1
+
+# Select these implementations with providers.capabilities.storage/thread.
+# The runtime downloads the exact release asset on first start, verifies it
+# against checksums.txt, and keeps it under the host cache directory.
+servers:
+  - server_id: lisa-storage-go
+    capability: storage
+    capability_tools:
+      - read_file
+      - read_file_range
+      - write_file
+      - append_file
+      - list_files
+      - delete_file
+      - stat_file
+      - make_dir
+      - read_model_manifest
+      - write_model_manifest
+    default_available_tools:
+      - read_file
+      - read_file_range
+      - list_files
+      - stat_file
+      - write_file
+      - append_file
+    runtime_kind: binary
+    binary_download:
+      repository: Lisa-Harness/lisa-go
+      version: v0.1.0
+      binary_name: lisa-storage
+    warm: true
+    required: true
+    data_dir_subdir: "."
+
+  - server_id: lisa-thread-go
+    capability: thread
+    capability_tools:
+      - thread_read_range
+      - thread_read_recent
+      - thread_search
+      - thread_read_content
+      - thread_find_content
+      - thread_task_view
+    default_available_tools:
+      - thread_read_range
+      - thread_read_recent
+      - thread_search
+      - thread_read_content
+      - thread_find_content
+    runtime_kind: binary
+    binary_download:
+      repository: Lisa-Harness/lisa-go
+      version: v0.1.0
+      binary_name: lisa-thread
+    warm: true
+    required: true
+    cli_args:
+      - "--thread-dir"
+      - "${LISA_THREAD_DIR}"
+      - "--user-slug"
+      - "${LISA_USER_SLUG}"
