@@ -10,8 +10,8 @@ resources:
     required: [lisa-pack-go-connectors]
     auto_install:
       lisa-pack-go-connectors:
-        source: git+https://github.com/Lisa-Harness/lisa-go.git@v0.1.0#subdirectory=pack
-        pin: v0.1.0
+        source: git+https://github.com/Lisa-Harness/lisa-go.git@v0.2.0#subdirectory=pack
+        pin: v0.2.0
 
 providers:
   capabilities:
@@ -26,7 +26,8 @@ the release asset against `checksums.txt` and caches it under
 file. The release workflow publishes Linux, macOS, and Windows
 `amd64`/`arm64` binaries when a `v*.*.*` tag is pushed.
 
-The current pack manifest pins `v0.1.0`, which publishes storage and thread
-only. The source release workflow now builds fetch, storage, thread and
-memory for future tags; update the manifest pins only to a tag whose release
-contains the selected binaries and checksums.
+The pack manifest pins `v0.2.0`, whose release workflow builds fetch, storage,
+thread and memory for all six targets (24 binaries plus `checksums.txt`).
+Fetch is distributed as a standalone MCP server; this pack registers only
+the storage, thread and memory capabilities. `v0.1.0` contains only storage
+and thread binaries.

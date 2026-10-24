@@ -1,6 +1,6 @@
 version: 1
 
-# Select these implementations with providers.capabilities.storage/thread.
+# Select these implementations with providers.capabilities.storage/thread/memory.
 # The runtime downloads the exact release asset on first start, verifies it
 # against checksums.txt, and keeps it under the host cache directory.
 servers:
@@ -27,7 +27,7 @@ servers:
     runtime_kind: binary
     binary_download:
       repository: Lisa-Harness/lisa-go
-      version: v0.1.0
+      version: v0.2.0
       binary_name: lisa-storage
     warm: true
     required: true
@@ -52,7 +52,7 @@ servers:
     runtime_kind: binary
     binary_download:
       repository: Lisa-Harness/lisa-go
-      version: v0.1.0
+      version: v0.2.0
       binary_name: lisa-thread
     warm: true
     required: true
@@ -76,7 +76,7 @@ servers:
     runtime_kind: binary
     binary_download:
       repository: Lisa-Harness/lisa-go
-      version: v0.1.0
+      version: v0.2.0
       binary_name: lisa-memory
     warm: true
     required: true

@@ -396,16 +396,15 @@ redesign is authorized by this porting work.
 
 Status as of 2026-10-24: the repo is public and `v0.1.0` is tagged. That
 release contains 12 binaries (storage and thread for six OS/architecture
-targets) plus `checksums.txt`. The release workflow now builds fetch,
-storage, thread and memory for future tags (24 binaries); this does not add
-assets retroactively to `v0.1.0`. The pack's binary pins must move together
-to a tag that actually contains each selected server before those providers
-are enabled.
+targets) plus `checksums.txt`. The `v0.2.0` release workflow builds fetch,
+storage, thread and memory (24 binaries); this does not add assets
+retroactively to `v0.1.0`. The pack version, installation examples and all
+three capability binary pins now target `v0.2.0`. Verify the published
+assets before enabling those providers.
 
 - **Asset coverage.** The source release workflow now includes all four
-  currently ported servers. Verify the next release's 24 assets and
-  checksums, then update the pack's pins and validate each selected server
-  against the published release.
+  currently ported servers. Verify `v0.2.0`'s 24 assets and checksums, then
+  validate each selected server against the published release.
 - **Pack hygiene.** The pack must stay in sync with the Go servers'
   published surface: `capability_tools`/`default_available_tools` were
   verified against the host manifest's built-ins with the real Python

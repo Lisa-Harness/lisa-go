@@ -21,7 +21,7 @@ cmd/lisa-fetch/     Phase 1 pilot — lisa-fetch MCP server in Go
 cmd/lisa-storage/   Phase 2 — sandboxed storage backend
 cmd/lisa-thread/    Phase 2 — thread read path
 cmd/lisa-memory/    Phase 2 — memory backend (SQLite store, backups, recall)
-pack/               Installable Lisa pack for the storage/thread providers
+pack/               Installable Lisa pack for the storage/thread/memory providers
 PROTOCOL.md         contract version this module implements
 ```
 

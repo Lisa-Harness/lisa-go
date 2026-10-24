@@ -8,8 +8,8 @@ only-include = ["src/lisa_packs/go_connectors"]
 
 [project]
 name = "lisa-pack-go-connectors"
-version = "0.1.0"
-description = "Lisa storage and thread MCP providers backed by pinned Go binaries"
+version = "0.2.0"
+description = "Lisa storage, thread and memory MCP providers backed by pinned Go binaries"
 requires-python = ">=3.11"
 
 [project.entry-points."lisa.extensions.content_roots"]
