@@ -39,13 +39,23 @@ Contract **v1** implemented end-to-end: `lisa-fetch` (pilot), `lisa-storage`,
 spawn the real binaries over stdio exactly as the runtime does.
 `connector/thread` is line-reviewed against the Python sources with a
 structural crosscheck that runs the reference `ThreadReader` on identical
-fixtures. `connector/memory` ports `SqliteMemoryStore` (schema v2,
-surface-scoped isolation, tier TTL expiry, lexical-overlap ranking,
-opportunistic access tracking, point-in-time SQL backup dumps and the
-embedding sidecar for semantic KNN recall — `modernc.org/sqlite`, pure Go, no
-cgo, keeping the release matrix static-build). The Python framework and the
-Pack SDK remain the source of truth for domain logic and extensibility; this
-SDK never reimplements them.
+fixtures. `connector/memory` carries the same two validation layers: ~30
+store tests mirroring the Python `sdk/memory/tests/test_store.py` suite, plus
+a **differential crosscheck** ([py_probe.py](connector/memory/py_probe.py) +
+[crosscheck_test.go](connector/memory/crosscheck_test.go)) that builds the
+fixture with the real Python `SqliteMemoryStore`, then replays 17 identical
+operations in Go on the same DB and compares canonical JSON output —
+run it via [connector/memory/run_crosscheck.ps1](connector/memory/run_crosscheck.ps1)
+(requires the lisa repo's venv). The crosscheck caught and locked two wire
+shape parity points: no `expires_at` field on records (Python's pydantic
+shape omits it; validity surfaces through `valid_until`) and `[]`-never-null
+for empty record lists. `connector/memory` ports `SqliteMemoryStore`
+(schema v2, surface-scoped isolation, tier TTL expiry, lexical-overlap
+ranking, opportunistic access tracking, point-in-time SQL backup dumps and
+the embedding sidecar for semantic KNN recall — `modernc.org/sqlite`, pure
+Go, no cgo, keeping the release matrix static-build). The Python framework
+and the Pack SDK remain the source of truth for domain logic and
+extensibility; this SDK never reimplements them.
 
 Remaining: port the remaining first-party content, catalog and guard
 servers; and implement the optional `lisa-mcp-broker` backend. The

@@ -131,21 +131,21 @@ func TestRecordMemoryAppliesTierTTL(t *testing.T) {
 	if permanent.ValidUntil != nil {
 		t.Errorf("permanent memory: valid_until %v, want nil", permanent.ValidUntil)
 	}
-	// The daily tier's expires_at must also be populated.
-	if daily.ExpiresAt == nil {
-		t.Error("daily memory: expires_at nil")
-	}
+	// The daily tier's expires_at is applied in the DB; on the record it
+	// surfaces through valid_until (no expires_at field on MemoryRecord —
+	// parity with the pydantic shape; crosscheck-locked).
 }
 
 // TestRecordMemoryUnknownTierFallsBackToDaily locks the Python .get(tier,
 // DEFAULT_TTL_DAYS["daily"]) parity: an unknown tier gets the 7-day TTL,
-// not a permanent row.
+// not a permanent row. Surfaced through valid_until (the expires_at DB
+// column is not part of the record shape).
 func TestRecordMemoryUnknownTierFallsBackToDaily(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	rec := mustRecord(t, s, write("typo'd tier", func(r *MemoryWriteRequest) { r.MemoryTier = "month" }))
-	if rec.ExpiresAt == nil {
-		t.Error("unknown tier: expires_at nil, want daily TTL fallback")
+	if rec.ValidUntil == nil {
+		t.Error("unknown tier: valid_until nil, want daily TTL fallback")
 	}
 }
 

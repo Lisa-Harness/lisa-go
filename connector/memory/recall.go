@@ -139,7 +139,7 @@ func (s *Store) recallRecordsLocked(ctx context.Context, query, userSlug string,
 		}
 	}
 	if len(poolRows) == 0 {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 
 	type rankedRecord struct {
@@ -186,7 +186,7 @@ func (s *Store) recallRecordsLocked(ctx context.Context, query, userSlug string,
 		ranked = append(ranked, rankedRecord{lexical + salienceBoost, rec})
 	}
 	if len(ranked) == 0 {
-		return nil, nil
+		return []MemoryRecord{}, nil
 	}
 
 	// (score, id) descending; the id tiebreak is part of the Python key.

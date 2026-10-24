@@ -35,7 +35,10 @@ type MemoryWriteRequest struct {
 // MemoryRecord is the canonical read shape (kernel MemoryRecord). The four
 // derived fields Python's row mapper fills (user_id, source_user_id and
 // source_user_slug from user_slug; valid_until from expires_at when unset)
-// are computed in rowToRecord — same transforms, same order.
+// are computed in rowToRecord — same transforms, same order. The DB's
+// expires_at column is NOT exposed: the pydantic MemoryRecord has no such
+// field, and validity surfaces through valid_until only (crosscheck-locked
+// against the Python model_dump shape).
 type MemoryRecord struct {
 	ID             int64          `json:"id"`
 	WorkspaceID    string         `json:"workspace_id"`
@@ -58,7 +61,6 @@ type MemoryRecord struct {
 	ItemIDs        []int64        `json:"item_ids"`
 	SupersedesID   *int64         `json:"supersedes_id"`
 	ValidUntil     *string        `json:"valid_until"`
-	ExpiresAt      *string        `json:"expires_at"`
 	LastAccessedAt *string        `json:"last_accessed_at"`
 	AccessCount    int64          `json:"access_count"`
 	Status         string         `json:"status"`
@@ -128,10 +130,6 @@ func rowToRecord(scan func(dest ...any) error) (MemoryRecord, error) {
 		v := expiresAt.String
 		rec.ValidUntil = &v
 	}
-	if expiresAt.Valid {
-		v := expiresAt.String
-		rec.ExpiresAt = &v
-	}
 	if lastAccessed.Valid {
 		v := lastAccessed.String
 		rec.LastAccessedAt = &v
@@ -151,6 +149,11 @@ func scanRecords(rows *sql.Rows) ([]MemoryRecord, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate memory rows: %w", err)
+	}
+	if records == nil {
+		// Python returns [] (never None) from its list/record paths; a JSON
+		// empty list, not null (crosscheck-locked).
+		records = []MemoryRecord{}
 	}
 	return records, nil
 }
