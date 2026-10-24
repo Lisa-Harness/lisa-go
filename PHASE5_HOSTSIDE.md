@@ -394,14 +394,18 @@ redesign is authorized by this porting work.
 
 ### Release gating for the provider pack (registration workstream)
 
-Status as of 2026-10-24: the first three gates are satisfied — the repo is
-public, `v0.1.0` is tagged, and the release workflow published 12 binaries
-plus `checksums.txt`. The remaining gates:
+Status as of 2026-10-24: the repo is public and `v0.1.0` is tagged. That
+release contains 12 binaries (storage and thread for six OS/architecture
+targets) plus `checksums.txt`. The release workflow now builds fetch,
+storage, thread and memory for future tags (24 binaries); this does not add
+assets retroactively to `v0.1.0`. The pack's binary pins must move together
+to a tag that actually contains each selected server before those providers
+are enabled.
 
-- **Asset coverage.** `release.yml` builds only `lisa-storage` and
-  `lisa-thread`; the Go fetch server has no release asset, so it cannot be
-  selected via `binary_download` today. Add it to the matrix before any
-  fetch registration.
+- **Asset coverage.** The source release workflow now includes all four
+  currently ported servers. Verify the next release's 24 assets and
+  checksums, then update the pack's pins and validate each selected server
+  against the published release.
 - **Pack hygiene.** The pack must stay in sync with the Go servers'
   published surface: `capability_tools`/`default_available_tools` were
   verified against the host manifest's built-ins with the real Python

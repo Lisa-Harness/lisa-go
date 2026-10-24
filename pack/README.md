@@ -26,5 +26,7 @@ the release asset against `checksums.txt` and caches it under
 file. The release workflow publishes Linux, macOS, and Windows
 `amd64`/`arm64` binaries when a `v*.*.*` tag is pushed.
 
-The first pinned version is `v0.1.0`. It becomes usable after that tag is
-published and the release workflow uploads its binaries and checksums.
+The current pack manifest pins `v0.1.0`, which publishes storage and thread
+only. The source release workflow now builds fetch, storage, thread and
+memory for future tags; update the manifest pins only to a tag whose release
+contains the selected binaries and checksums.
