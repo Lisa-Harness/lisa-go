@@ -261,13 +261,19 @@ func (s *Store) semanticPoolLocked(ctx context.Context, qvec []float64, userSlug
 	var candidates []candidate
 	for rows.Next() {
 		var id int64
-		var embJSON string
-		if err := rows.Scan(&id, &embJSON); err != nil {
+		var blob []byte
+		if err := rows.Scan(&id, &blob); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan semantic pool row: %w", err)
 		}
-		var vec []float64
-		if err := json.Unmarshal([]byte(embJSON), &vec); err != nil || len(vec) != len(qvec) {
+		vec, err := decodeVector(blob)
+		if err != nil {
+			// Corrupt row: skip it (the write side validates dimensions;
+			// a hand-tampered DB should not take recall down).
+			s.log.Warn("skipping corrupt embedding", "memory_id", id, "err", err)
+			continue
+		}
+		if len(vec) != len(qvec) {
 			continue
 		}
 		candidates = append(candidates, candidate{id, l2Squared(qvec, vec)})

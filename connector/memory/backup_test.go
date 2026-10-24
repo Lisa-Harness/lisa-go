@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"database/sql"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -125,6 +126,66 @@ func TestEmbeddingDimensionMismatchSkipsSidecar(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("memory_vec rows = %d, want 0 (mismatched vectors skipped)", count)
+	}
+}
+
+// TestEmbeddingStorageIsFloat32Blob locks the sidecar storage format: a
+// big-endian float32 BLOB per vector (sqlite-vec's storage precision), so a
+// 1536-dim embedding is 6 KiB — not the ~19 KiB a JSON-text encoding would
+// be — and values round-trip through float32 precision.
+func TestEmbeddingStorageIsFloat32Blob(t *testing.T) {
+	t.Parallel()
+	s := newSemanticStore(t, 8, stubProvider{dim: 8})
+	rec := mustRecord(t, s, write("blob format probe", nil))
+
+	var blob []byte
+	var dimension int
+	if err := s.db.QueryRow(
+		"SELECT embedding, dimension FROM memory_vec WHERE memory_id = ?", rec.ID).
+		Scan(&blob, &dimension); err != nil {
+		t.Fatalf("read sidecar: %v", err)
+	}
+	if dimension != 8 {
+		t.Errorf("dimension = %d, want 8", dimension)
+	}
+	if len(blob) != 8*4 {
+		t.Errorf("blob = %d bytes, want 32 (8 dims x float32)", len(blob))
+	}
+	vec, err := decodeVector(blob)
+	if err != nil {
+		t.Fatalf("decode blob: %v", err)
+	}
+	if len(vec) != 8 {
+		t.Fatalf("decoded len = %d, want 8", len(vec))
+	}
+	// float32 round-trip: deterministic stub values within float32 precision.
+	for i, x := range vec {
+		want := float64((i + len("blob format probe")) % 7)
+		if math.Abs(x-want) > 1e-6 {
+			t.Errorf("vec[%d] = %v, want %v", i, x, want)
+		}
+	}
+}
+
+// TestEncodeDecodeVectorPrecision pins the float32 quantization behavior:
+// values survive within float32's ~7 significant digits (relative error),
+// which is exactly the precision sqlite-vec stores. Malformed blobs error.
+func TestEncodeDecodeVectorPrecision(t *testing.T) {
+	t.Parallel()
+	in := []float64{0.25, -1.5, 3.14159265, 12345.678}
+	out, err := decodeVector(encodeVector(in))
+	if err != nil {
+		t.Fatalf("round trip: %v", err)
+	}
+	for i, x := range out {
+		// float32 keeps ~7 significant digits: |diff| <= 1e-6 * max(|v|,1).
+		tol := 1e-6 * math.Max(math.Abs(in[i]), 1)
+		if math.Abs(x-in[i]) > 4*tol {
+			t.Errorf("vec[%d] = %v, want ~%v (float32)", i, x, in[i])
+		}
+	}
+	if _, err := decodeVector([]byte{1, 2, 3}); err == nil {
+		t.Error("expected error for non-multiple-of-4 blob")
 	}
 }
 

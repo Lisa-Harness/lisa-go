@@ -35,9 +35,12 @@
 //     logged and swallowed so a memory write never fails because of it.
 //
 // The Python store loads the optional sqlite-vec extension for semantic
-// recall; Go has no equivalent loadable extension, so the KNN candidate
-// pool is computed directly over the stored embedding vectors with the
-// same scope/expiry filters and the same fallback-to-lexical behavior.
+// recall. Go cannot load sqlite-vec (a native extension with no Go port),
+// so semantic recall here is: the same float32 vector storage vec0 uses,
+// with the KNN candidate pool computed directly in Go — the same brute-
+// force distance scan vec0's MATCH KNN performs (neither has an ANN index)
+// — under the same scope/expiry filters and the same fallback-to-lexical
+// behavior.
 package memory
 
 import (
@@ -210,14 +213,17 @@ func (s *Store) initSchema() error {
 		}
 	}
 	// Semantic recall: Go has no sqlite-vec equivalent extension, so the
-	// embedding sidecar is a plain table (memory_id → JSON vector). The
-	// KNN candidate pool is computed in Go with identical scope/expiry
-	// filters. Present only when semantic recall is wired (parity: the
-	// Python store stays lexical-only when the extension does not load).
+	// embedding sidecar is a plain table storing each vector as a compact
+	// big-endian float32 BLOB — the same storage precision as sqlite-vec's
+	// vec0 (float32, 4 bytes/dimension) — and the KNN candidate pool is a
+	// brute-force distance scan in Go, matching vec0's default MATCH KNN
+	// algorithm (no ANN index). Present only when semantic recall is wired
+	// (parity: the Python store stays lexical-only when the extension does
+	// not load).
 	if s.embeddingProvider != nil {
 		if _, err := s.db.Exec(fmt.Sprintf(
 			"CREATE TABLE IF NOT EXISTS memory_vec ("+
-				"memory_id INTEGER PRIMARY KEY, embedding TEXT NOT NULL, "+
+				"memory_id INTEGER PRIMARY KEY, embedding BLOB NOT NULL, "+
 				"dimension INTEGER NOT NULL DEFAULT %d)", s.embeddingDim)); err != nil {
 			return fmt.Errorf("create memory_vec: %w", err)
 		}

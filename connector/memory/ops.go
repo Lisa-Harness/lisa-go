@@ -53,11 +53,7 @@ func (s *Store) writeEmbedding(ctx context.Context, memoryID int64, content stri
 			"memory_id", memoryID, "got", len(vec), "want", s.embeddingDim)
 		return
 	}
-	b, err := json.Marshal(vec)
-	if err != nil {
-		s.log.Warn("embedding marshal failed", "memory_id", memoryID, "err", err)
-		return
-	}
+	blob := encodeVector(vec)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -65,9 +61,37 @@ func (s *Store) writeEmbedding(ctx context.Context, memoryID int64, content stri
 	}
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO memory_vec (memory_id, embedding, dimension) VALUES (?, ?, ?)`,
-		memoryID, string(b), len(vec)); err != nil {
+		memoryID, blob, len(vec)); err != nil {
 		s.log.Warn("embedding write failed", "memory_id", memoryID, "err", err)
 	}
+}
+
+// encodeVector serializes one embedding as big-endian float32 — the same
+// storage precision and layout sqlite-vec's vec0 uses — so a 1536-dim
+// embedding is a 6 KiB blob instead of ~19 KiB of JSON text.
+func encodeVector(vec []float64) []byte {
+	out := make([]byte, len(vec)*4)
+	for i, x := range vec {
+		bits := math.Float32bits(float32(x))
+		out[i*4] = byte(bits >> 24)
+		out[i*4+1] = byte(bits >> 16)
+		out[i*4+2] = byte(bits >> 8)
+		out[i*4+3] = byte(bits)
+	}
+	return out
+}
+
+// decodeVector parses one big-endian float32 blob back into float64s.
+func decodeVector(b []byte) ([]float64, error) {
+	if len(b)%4 != 0 {
+		return nil, fmt.Errorf("corrupt embedding blob: %d bytes, want multiple of 4", len(b))
+	}
+	out := make([]float64, len(b)/4)
+	for i := range out {
+		bits := uint32(b[i*4])<<24 | uint32(b[i*4+1])<<16 | uint32(b[i*4+2])<<8 | uint32(b[i*4+3])
+		out[i] = float64(math.Float32frombits(bits))
+	}
+	return out, nil
 }
 
 // RecordMemoryLocked is the insert + read-back half of RecordMemory; the
