@@ -11,6 +11,20 @@ This supersedes the earlier Go-embedder-only proposal. It does not authorize
 implementing the broker, changing the Python runtime, or porting servers as
 part of this documentation task.
 
+### Prompt startup is a separate workstream
+
+The Python framework's catalog/content adapters now reuse long-lived stdio
+sessions rather than spawning a Python server per call. These synchronous
+framework sessions remain outside this broker's coverage.
+
+Further work is specified in the Python framework's
+[prompt startup proposal](https://github.com/Lisa-Harness/lisa/blob/main/docs/SPEC/PROMPT_STARTUP.md):
+cache-refresh and runtime-lifecycle ownership first, then in-process
+catalog/content access, measured import/bootstrap improvements, and separate
+`--no-thread` correctness work. That proposal is **SPEC ONLY**, not broker
+implementation authorization. Catalog/content Go wrappers around Python are
+not a startup optimization; a broker alone does not remove their import cost.
+
 ## 1. Architecture and ownership
 
 ```text
