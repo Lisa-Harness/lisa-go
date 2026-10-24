@@ -29,6 +29,15 @@ runtime's `binary` runtime kind spawns it directly.
 
 ## Status
 
-Phase 0 (contract) done in the `lisa` repo; scaffold in place. Requires Go 1.22+.
-The Python framework and the Pack SDK remain the source of truth for domain
-logic and extensibility; this SDK never reimplements them.
+Contract **v1** implemented end-to-end: `lisa-fetch` (pilot), `lisa-storage`,
+and `lisa-thread` (read path) are ported and verified — `go build ./...`,
+`go vet ./...`, `go test ./...` green, with e2e tests that spawn the real
+binaries over stdio exactly as the runtime does. `connector/thread` is
+line-reviewed against the Python sources with a structural crosscheck that
+runs the reference `ThreadReader` on identical fixtures. The Python framework
+and the Pack SDK remain the source of truth for domain logic and
+extensibility; this SDK never reimplements them.
+
+Remaining: register the binaries with a live Python runtime run
+(`mcp_servers.yaml` `runtime_kind: binary`), and the host/embed side of the
+SDK. Requires Go 1.22+.
