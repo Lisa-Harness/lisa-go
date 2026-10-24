@@ -40,6 +40,9 @@ const (
 	maxReferenceChars  = 128
 )
 
+// TaskScanLimit mirrors _readout._TASK_SCAN_LIMIT for the MCP tool layer.
+const TaskScanLimit = taskScanLimit
+
 // rangeCursorPattern mirrors _readout._RANGE_CURSOR; searchCursorPattern
 // mirrors _SEARCH_CURSOR; referencePattern mirrors _REFERENCE.
 var (
@@ -375,7 +378,11 @@ func scoreEntry(turn int, entry map[string]any, query string, filters SearchFilt
 	return &scoredEntry{Turn: turn, Score: score, Matches: matches}
 }
 
-// searchEntries mirrors heapq.nlargest(limit, candidates, key=(score, turn)).
+// searchEntries mirrors heapq.nlargest(limit, candidates, key=(score, turn)):
+// the result is in rank order — descending by score, then descending by turn —
+// and the Search page slices matches[position:] in that SAME rank order (the
+// Python server does not re-sort into chronological order; the comment that
+// claimed it did was wrong).
 func searchEntries(entries []TurnEntry, query string, limit int, filters SearchFilters, redaction *RedactionPolicy) []scoredEntry {
 	var candidates []scoredEntry
 	for _, te := range entries {
@@ -392,9 +399,6 @@ func searchEntries(entries []TurnEntry, query string, limit int, filters SearchF
 	if len(candidates) > limit {
 		candidates = candidates[:limit]
 	}
-	// nlargest output order is by rank; restore chronological page order
-	// (cursor slicing then matches the Python server).
-	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].Turn < candidates[j].Turn })
 	return candidates
 }
 
@@ -608,11 +612,14 @@ func (r *ThreadReader) entry(entry map[string]any, turn int) map[string]any {
 	}
 	result["task_id"] = r.preview(entryTaskID(entry), fmt.Sprintf("t%d.task_id", turn))
 	result["receipt_capability_ids"] = r.preview(caps, fmt.Sprintf("t%d.receipt_capability_ids", turn))
+	// Mirrors `source = entry.get("content_source"); reasoning =
+	// entry.get("reasoning_text"); if source and reasoning:` — Python
+	// truthiness, so an empty-string or falsy reasoning value emits neither
+	// field.
 	source := strField(entry, "content_source")
-	reasoning, hasReasoning := entry["reasoning_text"]
-	if source != "" && hasReasoning && reasoning != nil {
+	if source != "" && pyTruthy(entry["reasoning_text"]) {
+		reasoningText, _ := r.redact(pyStr(entry["reasoning_text"])).(string)
 		result["content_source"] = r.preview(source, fmt.Sprintf("t%d.content_source", turn))
-		reasoningText, _ := r.redact(pyStr(reasoning)).(string)
 		result["reasoning_excerpt"] = tailChars(reasoningText, reasoningChars)
 		result["reasoning_omitted_chars"] = maxInt(0, utf8.RuneCountInString(reasoningText)-reasoningChars)
 	}
@@ -774,9 +781,11 @@ func (r *ThreadReader) Search(query string, limit int, cursor *string, budgetByt
 	if startTurn < 0 || (endTurn != nil && *endTurn < startTurn) {
 		return "", errors.New("Invalid search turn range")
 	}
+	// The signature serializes inputs with the same non-escaping compact
+	// encoder as everything else; json.Marshal would HTML-escape a query
+	// containing < > & and diverge from Python's sha256 input.
 	inputs := []any{query, capped, toolName, path, taskID, startTurn, endTurn}
-	sigBytes, _ := json.Marshal(inputs)
-	signature := fmt.Sprintf("%x", sha256.Sum256(append([]byte{}, sigBytes...)))[:16]
+	signature := fmt.Sprintf("%x", sha256.Sum256([]byte(encode(inputs))))[:16]
 	end := r.Store.NextTurnIndex() - 1
 	if endTurn != nil {
 		end = minInt(end, *endTurn)
@@ -939,6 +948,10 @@ func (r *ThreadReader) FindContent(ref, query string, offsetChars, limit, budget
 		"total_chars":       utf8.RuneCountInString(text),
 	}
 	matches := page["matches"].([]any)
+	// Mirrors _readout.find_content: the match-count stop uses the clamped
+	// limit (max(1, min(limit, _MAX_SEARCH_RESULTS))); the cache key keeps
+	// the raw limit, so clamping happens only here.
+	stopAt := maxInt(1, minInt(limit, maxSearchResults))
 	position := offsetChars
 	for {
 		start, ok := regexpFindCaseInsensitive(sliceChars(text, position, utf8.RuneCountInString(text)), query)
@@ -962,7 +975,7 @@ func (r *ThreadReader) FindContent(ref, query string, offsetChars, limit, budget
 			break
 		}
 		position = foundEnd
-		if len(matches) >= limit {
+		if len(matches) >= stopAt {
 			if _, more := regexpFindCaseInsensitive(sliceChars(text, position, utf8.RuneCountInString(text)), query); more {
 				page["next_offset_chars"] = position
 				page["has_more"] = true
@@ -1070,23 +1083,53 @@ func (r *ThreadReader) resolveEntryField(entry map[string]any, field string) (an
 	if field == "provenance_source" {
 		return getMap(entry, "provenance")["source"], nil
 	}
+	if field == "receipt_capability_ids" {
+		return receiptCaps(entry), nil
+	}
 	if field == "task_id" {
 		return entryTaskID(entry), nil
 	}
 	if field == "pending_approval_request_id" {
-		return getMap(entry, "provenance")["pending_approval_request_id"], nil
+		// Mirrors (entry.get("provenance") or {}).get(field) or "": the
+		// default applies through Python truthiness, so a present-but-falsy
+		// provenance value renders "".
+		return pyStr(defaultStr(getMap(entry, "provenance")["pending_approval_request_id"], "")), nil
 	}
-	valid := false
+	if field == "yield_question" {
+		return pyStr(defaultStr(entry["yield_question"], "")), nil
+	}
+	// content_source joins _ENTRY_FIELDS as an expandable top-level field
+	// (emitted by _entry when reasoning is present).
+	valid := field == "content_source"
 	for _, f := range entryFields {
 		if f == field {
 			valid = true
 			break
 		}
 	}
+	// Python raises unless the field is a known name AND present in the
+	// entry: `field not in (*_ENTRY_FIELDS, "content_source") or field not
+	// in entry`. Without the presence check, Go would return a null page
+	// where Python returns a tool error.
 	if !valid || field == "" {
 		return nil, errors.New("Entry field not found or not available for expansion")
 	}
+	if _, present := entry[field]; !present {
+		return nil, errors.New("Entry field not found or not available for expansion")
+	}
 	return entry[field], nil
+}
+
+// receiptCaps mirrors _readout._receipt_caps: the capability_id string of
+// every dict-shaped effect receipt (str(x or "")).
+func receiptCaps(entry map[string]any) []any {
+	var caps []any
+	for _, receipt := range getList(entry, "effect_receipts") {
+		if m, ok := receipt.(map[string]any); ok {
+			caps = append(caps, pyStr(defaultStr(m["capability_id"], "")))
+		}
+	}
+	return caps
 }
 
 func resolveCall(entry map[string]any, messageIndex, callIndex int, field string) (any, error) {
@@ -1183,13 +1226,15 @@ func taskViewPreview(text string, limit int) map[string]any {
 
 func taskViewStatus(entry map[string]any) string {
 	provenance := getMap(entry, "provenance")
-	if provenance["pending_approval_request_id"] != nil && provenance["pending_approval_request_id"] != "" {
+	// Python truthiness on each check (x.get(k) is truthy for any non-empty
+	// value, not just non-empty strings / true bools).
+	if pyTruthy(provenance["pending_approval_request_id"]) {
 		return "awaiting_approval"
 	}
-	if provenance["operator_exit"] == "paused" {
+	if pyStr(defaultStr(provenance["operator_exit"], "")) == "paused" {
 		return "paused"
 	}
-	if v, ok := entry["yielded"].(bool); ok && v {
+	if pyTruthy(entry["yielded"]) {
 		return "awaiting_user"
 	}
 	return "open"
@@ -1197,10 +1242,10 @@ func taskViewStatus(entry map[string]any) string {
 
 func taskViewBlocker(entry map[string]any, redaction *RedactionPolicy) map[string]any {
 	provenance := getMap(entry, "provenance")
-	if reqID := provenance["pending_approval_request_id"]; reqID != nil && reqID != "" {
-		return map[string]any{"kind": "approval", "request_id": taskViewText(reqID, redaction)}
+	if pyTruthy(provenance["pending_approval_request_id"]) {
+		return map[string]any{"kind": "approval", "request_id": taskViewText(provenance["pending_approval_request_id"], redaction)}
 	}
-	if v, ok := entry["yielded"].(bool); ok && v {
+	if pyTruthy(entry["yielded"]) {
 		return map[string]any{"kind": "question", "question": taskViewText(entry["yield_question"], redaction)}
 	}
 	return nil
@@ -1314,8 +1359,9 @@ func taskViewEvidence(scoped []TurnEntry) []string {
 
 func taskViewObjective(scoped []TurnEntry, redaction *RedactionPolicy) (string, int) {
 	for _, te := range scoped {
+		// query.lstrip() is Unicode-whitespace stripping (Python str).
 		query := taskViewText(te.Entry["query"], redaction)
-		if query != "" && !strings.HasPrefix(strings.TrimLeft(query, " \t\n\r"), "/") {
+		if query != "" && !strings.HasPrefix(pyLstrip(query), "/") {
 			return query, te.Turn
 		}
 	}
@@ -1366,7 +1412,10 @@ func pyStrValue(v any) string {
 
 func trimTaskView(view map[string]any, budget int) map[string]any {
 	textLimit := objectiveChars
-	for len(encode(view)) > budget {
+	// _taskview._trim measures with Python's DEFAULT json separators
+	// (", " / ": "), not the compact ones used everywhere else in the
+	// read path; ~5-10% larger, so trimming fires earlier.
+	for pyDefaultSepLen(view) > budget {
 		if evidence, ok := view["evidence"].([]any); ok && len(evidence) > 0 {
 			view["evidence"] = evidence[1:]
 			view["evidence_truncated"] = true
@@ -1377,10 +1426,9 @@ func trimTaskView(view map[string]any, budget int) map[string]any {
 			view["modes"] = modes[:len(modes)-1]
 			view["modes_truncated"] = true
 		} else {
+			// Python's text_limit //= 2 has no floor: it reaches 0 and
+			// empties even single characters from previewed strings.
 			textLimit /= 2
-			if textLimit < 1 {
-				textLimit = 1
-			}
 			view = compactTaskViewText(view, textLimit).(map[string]any)
 			view["truncated"] = true
 		}
@@ -1485,17 +1533,20 @@ func mergeMaps(a, b map[string]any) map[string]any {
 	return out
 }
 
-// TaskView mirrors _readout.ThreadReader.task_view.
-func (r *ThreadReader) TaskView(taskID string, budgetBytes int) (string, error) {
-	if budgetBytes <= 0 {
-		return "", errors.New("budget_bytes must be positive")
+// TaskView mirrors _readout.ThreadReader.task_view(task_id, *,
+// scan_limit=_TASK_SCAN_LIMIT, budget_bytes=...). The MCP tool layer never
+// passes scan_limit (the Python server relies on the default), but the
+// SDK-level signature keeps the parameter and Python's error text.
+func (r *ThreadReader) TaskView(taskID string, scanLimit, budgetBytes int) (string, error) {
+	if budgetBytes <= 0 || scanLimit <= 0 {
+		return "", errors.New("budget_bytes and scan_limit must be positive")
 	}
 	budget := maxInt(1024, minInt(budgetBytes, MAX_READOUT_BYTES))
 	end := r.Store.NextTurnIndex() - 1
 	if end < 0 {
 		return encode(BuildTaskView(nil, taskID, r.Redaction, budget)), nil
 	}
-	start := maxInt(0, end-maxInt(1, minInt(taskScanLimit, taskScanLimit))+1)
+	start := maxInt(0, end-maxInt(1, minInt(scanLimit, taskScanLimit))+1)
 	entries := r.Store.IterRange(start, end)
 	return encode(BuildTaskView(entries, taskID, r.Redaction, budget)), nil
 }

@@ -511,8 +511,10 @@ func (s *ThreadStore) BuildRecentExcerpt(limit int, isHostCommand func(string) b
 			body = query
 		}
 		if prov := getMap(entry, "provenance"); prov != nil {
-			source := pyStr(defaultStr(prov["source"], "observed"))
-			model := pyStr(defaultStr(prov["model_id"], "unknown"))
+			// prov.get("source", "observed"): the default applies when the
+			// KEY is absent; a present null renders "None" (Python str()).
+			source := pyGetStrDefault(prov, "source", "observed")
+			model := pyGetStrDefault(prov, "model_id", "unknown")
 			body = fmt.Sprintf("%s [system_provenance: %s, model_id: %s]", body, source, model)
 		}
 		timestamp := pyStr(defaultStr(entry["timestamp_utc"], "unknown"))
@@ -540,16 +542,6 @@ func (s *ThreadStore) BuildRecentExcerpt(limit int, isHostCommand func(string) b
 	return lines[0] + "\n" + strings.Join(rest, "\n") + "\n\n" + footer
 }
 
-func defaultStr(v any, def string) any {
-	if v == nil {
-		return def
-	}
-	if s, ok := v.(string); ok && s == "" {
-		return def
-	}
-	return v
-}
-
 // BuildManifest builds a compact structured manifest of recent thread
 // entries (the lossless "table of contents"). Returns "" when there are no
 // entries.
@@ -563,6 +555,8 @@ func (s *ThreadStore) BuildManifest(limit int) string {
 	b.WriteString("| Turn | Recorded At (UTC) | Mode | Query | Writes | Handoff |\n")
 	b.WriteString("| --- | --- | --- | --- | --- | --- |\n")
 	total := len(entries)
+	// Python: str(stored_turn) if isinstance(stored_turn, int) — exact
+	// int type check, so a float turn value falls to the ordinal form.
 	for offset, entry := range entries {
 		var turn string
 		if stored, ok := entry["turn"]; ok {
@@ -597,11 +591,11 @@ func (s *ThreadStore) BuildManifest(limit int) string {
 			if !ok {
 				continue
 			}
-			effect, _ := rm["effect"].(string)
+			effect := pyStr(defaultStr(rm["effect"], ""))
 			if effect != "write" && effect != "external_write" {
 				continue
 			}
-			cap := pyStr(rm["capability_id"])
+			cap := pyStr(defaultStr(rm["capability_id"], ""))
 			if !seen[cap] {
 				seen[cap] = true
 				writeCaps = append(writeCaps, cap)

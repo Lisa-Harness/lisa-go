@@ -439,11 +439,14 @@ func addThreadTools(server *mcp.Server, reader *thread.ThreadReader) {
 		if args.TaskID != nil {
 			taskID = *args.TaskID
 		}
-		budget := thread.DEFAULT_TASK_VIEW_BYTES
+		// The Python MCP tool defaults budget_bytes to DEFAULT_READOUT_BYTES
+		// (16384) — NOT the SDK's task-view default of 8192. The SDK-level
+		// 8192 default never reaches the wire.
+		budget := thread.DEFAULT_READOUT_BYTES
 		if args.BudgetBytes != nil {
 			budget = *args.BudgetBytes
 		}
-		out, err := reader.TaskView(taskID, budget)
+		out, err := reader.TaskView(taskID, thread.TaskScanLimit, budget)
 		if err != nil {
 			return toolTextErr(err)
 		}

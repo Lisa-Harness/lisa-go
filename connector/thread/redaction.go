@@ -17,6 +17,14 @@ const RedactionMarker = "̶"
 
 // DefaultRedactionPatterns strip prior cap-fire / budget-exhaustion
 // self-reports from thread context (mirrors DEFAULT_REDACTION_PATTERNS).
+//
+// Go's RE2 \w and \d are ASCII-only, while Python's str-pattern \w and \d
+// match Unicode word characters and digits. The Unicode classes below keep
+// the matcher behavior aligned with the Python source of truth; the pattern
+// TEXTS are the invariant, not the ASCII shorthand.
+var pyWordClass = `[\p{L}\p{N}_]`
+var pyDigitClass = `[0-9\p{Nd}]`
+
 var DefaultRedactionPatterns = []string{
 	// Model-authored: "I've hit my iteration budget in <mode> (...)."
 	`I've hit my iteration budget[^\n]*`,
@@ -26,9 +34,9 @@ var DefaultRedactionPatterns = []string{
 	// budget for this turn. ..."
 	`I've reached a resource budget[^\n]*`,
 	// Harness pause diagnostic: "stuck in <mode> for N iterations (cap)".
-	`stuck in \w+ for \d+ iterations \(cap\)[^\n]*`,
+	`stuck in ` + pyWordClass + `+ for ` + pyDigitClass + `+ iterations \(cap\)[^\n]*`,
 	// Harness yield: "iteration cap N reached".
-	`iteration cap \d+ reached[^\n]*`,
+	`iteration cap ` + pyDigitClass + `+ reached[^\n]*`,
 	// Harness yield: "turn budget exhausted".
 	`turn budget exhausted[^\n]*`,
 }
