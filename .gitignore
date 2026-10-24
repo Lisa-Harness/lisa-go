@@ -1,0 +1,11 @@
+# --- Go build artifacts ------------------------------------------------------
+bin/
+*.exe
+*.test
+*.out
+
+# --- Runtime test clutter ----------------------------------------------------
+tmp-data/
+tmp-cold/
+# Per-server JSONL log fallback (<cwd>/<server-id>.jsonl) and captured runs.
+*.jsonl
