@@ -61,3 +61,44 @@ servers:
       - "${LISA_THREAD_DIR}"
       - "--user-slug"
       - "${LISA_USER_SLUG}"
+
+  - server_id: lisa-memory-go
+    capability: memory
+    capability_tools:
+      - add
+      - search
+      - list
+    capability_optional_tools:
+      - get
+      - delete
+      - retire
+      - count
+    runtime_kind: binary
+    binary_download:
+      repository: Lisa-Harness/lisa-go
+      version: v0.1.0
+      binary_name: lisa-memory
+    warm: true
+    required: true
+    data_dir_subdir: "."
+    # tool_map publishes the canonical memory.* contract over the native
+    # wire names (published → native). The published ids are identical to
+    # the synthetic alias names, so prompts and pack operations that call
+    # memory.add are unchanged. Unmapped native tools stay internal-only
+    # for capability servers.
+    tool_map:
+      add: add_memory
+      search: search_memory
+      list: list_memories
+      get: get_memory
+      delete: delete_memory
+      retire: retire_memory
+      count: count_memories
+    # proxy_policy strips the ambient identity field (user_slug) from the
+    # native tools' model-facing schema and injects it from the host
+    # runtime at dispatch time — same policy the Python lisa-memory pack
+    # entry carries. Without this, add_memory/search_memory would surface
+    # user_slug as a settable model parameter.
+    proxy_policy:
+      ambient:
+        user_slug: user_slug

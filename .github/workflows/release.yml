@@ -51,7 +51,7 @@ jobs:
           mkdir -p dist
           extension=""
           if [ "$GOOS" = "windows" ]; then extension=".exe"; fi
-          for server in lisa-storage lisa-thread; do
+          for server in lisa-storage lisa-thread lisa-memory; do
             asset="${server}-${VERSION}-${GOOS}-${GOARCH}${extension}"
             CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
               -o "dist/${asset}" "./cmd/${server}"

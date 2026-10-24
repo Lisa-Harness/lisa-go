@@ -1,8 +1,8 @@
 # Go MCP provider pack
 
-This pack contributes Go implementations of Lisa's `storage` and `thread`
-capabilities. Install it from the same pinned Go repository tag as the
-binary release:
+This pack contributes Go implementations of Lisa's `storage`, `thread` and
+`memory` capabilities. Install it from the same pinned Go repository tag as
+the binary release:
 
 ```yaml
 resources:
@@ -17,6 +17,7 @@ providers:
   capabilities:
     storage: lisa-pack-go-connectors
     thread: lisa-pack-go-connectors
+    memory: lisa-pack-go-connectors
 ```
 
 The runtime downloads only selected capability implementations. It verifies

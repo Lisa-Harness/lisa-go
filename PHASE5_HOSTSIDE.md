@@ -314,20 +314,25 @@ runtime deployment to pin a known-compatible archive.
 
 ## 7. Remaining server-port scope
 
-The owner approved porting remaining first-party servers; implementation
-is deferred until after this spec task. Existing ports: fetch, storage and
-the thread MCP read surface.
+The owner approved porting remaining first-party servers. Existing ports:
+fetch, storage, the thread MCP read surface, and memory (2026-10-24:
+`cmd/lisa-memory` over `connector/memory` — SQLite schema v2 semantics via
+`modernc.org/sqlite`, surface-scoped isolation, tier TTL, lexical-overlap
+recall with an embedding sidecar for KNN, point-in-time SQL backup dumps;
+parity-tested against the Python store's suite). Deferred gates below still
+apply to the remaining candidates.
 
 | Candidate | Required scope and compatibility gates |
 | --- | --- |
 | `lisa-content` | Authored-text reads, roots and cache invalidation; preserve traversal safety, merged-root ordering and internal kernel access |
 | `lisa-catalog` | Modes, operations, tools, roots, invalidation and diagnostics; preserve collision behavior and pack-contributed content semantics |
 | `lisa-guard` | Input/output validation and backend status; preserve backend selection, result format and blocked audit logging; never substitute passthrough for an unsupported backend |
-| `lisa-memory` | SQLite records, scope, add/search/list/get/delete/retire/count; investigate schema, backups, embeddings and migrations before choosing dependencies |
+| `lisa-memory` | **Ported 2026-10-24.** SQLite records, scope, add/search/list/get/delete/retire/count; schema, backups and embeddings ported with pure-Go SQLite (`modernc.org/sqlite`) after dependency approval; semantic recall is a Go KNN over the embedding sidecar (Go has no sqlite-vec), preserving best-effort sidecar and lexical fallback behavior |
 
-Suggested execution order: content, catalog, guard, memory, revisited after
-dependency inventory. Memory remains pack-owned, with the same synthetic
-aliases and provider selection; third-party Mem0 is not a first-party port.
+Suggested execution order for the remaining candidates: content, catalog,
+guard, revisited after dependency inventory. Memory remains pack-owned, with
+the same synthetic aliases and provider selection (the Go pack now declares a
+memory capability owner); third-party Mem0 is not a first-party port.
 Thread writing is not part of the current thread MCP tool surface and is
 not implicitly added to this scope.
 

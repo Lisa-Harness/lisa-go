@@ -20,32 +20,39 @@ connector/          Connector SDK: spawn, stdio MCP client, contract CLI/logging
 cmd/lisa-fetch/     Phase 1 pilot — lisa-fetch MCP server in Go
 cmd/lisa-storage/   Phase 2 — sandboxed storage backend
 cmd/lisa-thread/    Phase 2 — thread read path
+cmd/lisa-memory/    Phase 2 — memory backend (SQLite store, backups, recall)
 pack/               Installable Lisa pack for the storage/thread providers
 PROTOCOL.md         contract version this module implements
 ```
 
 The Connector SDK grew out of the `lisa-fetch` pilot: `cmd/lisa-fetch` proves
 the server-side API, then `connector/` is hardened and used to port
-`lisa-storage` and `lisa-thread`. The Go provider pack declares these as
-`runtime_kind: binary`; the Python runtime downloads a pinned release asset,
-verifies its checksum, and caches it before launch.
+`lisa-storage`, `lisa-thread` and `lisa-memory`. The Go provider pack declares
+these as `runtime_kind: binary`; the Python runtime downloads a pinned release
+asset, verifies its checksum, and caches it before launch.
 
 ## Status
 
 Contract **v1** implemented end-to-end: `lisa-fetch` (pilot), `lisa-storage`,
-and `lisa-thread` (read path) are ported and verified — `go build ./...`,
-`go vet ./...`, `go test ./...` green, with e2e tests that spawn the real
-binaries over stdio exactly as the runtime does. `connector/thread` is
-line-reviewed against the Python sources with a structural crosscheck that
-runs the reference `ThreadReader` on identical fixtures. The Python framework
-and the Pack SDK remain the source of truth for domain logic and
-extensibility; this SDK never reimplements them.
+`lisa-thread` (read path) and `lisa-memory` are ported and verified —
+`go build ./...`, `go vet ./...`, `go test ./...` green, with e2e tests that
+spawn the real binaries over stdio exactly as the runtime does.
+`connector/thread` is line-reviewed against the Python sources with a
+structural crosscheck that runs the reference `ThreadReader` on identical
+fixtures. `connector/memory` ports `SqliteMemoryStore` (schema v2,
+surface-scoped isolation, tier TTL expiry, lexical-overlap ranking,
+opportunistic access tracking, point-in-time SQL backup dumps and the
+embedding sidecar for semantic KNN recall — `modernc.org/sqlite`, pure Go, no
+cgo, keeping the release matrix static-build). The Python framework and the
+Pack SDK remain the source of truth for domain logic and extensibility; this
+SDK never reimplements them.
 
-Remaining: port the remaining first-party content, catalog, guard and
-memory servers; and implement the optional `lisa-mcp-broker` backend. The
+Remaining: port the remaining first-party content, catalog and guard
+servers; and implement the optional `lisa-mcp-broker` backend. The
 broker would consume Python-resolved configurations and own launch/MCP pool
 mechanics, selected through a runtime switch; turns, packs, policy and
 approvals stay Python. The revised scope, distribution requirements and
 verification gates are in [PHASE5_HOSTSIDE.md](PHASE5_HOSTSIDE.md). These
 additions are **spec only**, not implemented. Standalone Go manifest
-loading and embedding are deferred. Requires Go 1.22+.
+loading and embedding are deferred. Requires Go 1.22+ (the memory port uses
+no newer toolchain than the existing floor).
