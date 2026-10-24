@@ -48,6 +48,7 @@ servers:
       - thread_search
       - thread_read_content
       - thread_find_content
+      - thread_task_view
     runtime_kind: binary
     binary_download:
       repository: Lisa-Harness/lisa-go
