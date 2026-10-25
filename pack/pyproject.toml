@@ -1,6 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { root = "..", version_scheme = "no-guess-dev" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lisa_packs"]
@@ -8,7 +12,7 @@ only-include = ["src/lisa_packs/go_connectors"]
 
 [project]
 name = "lisa-pack-go-connectors"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Lisa storage, thread and memory MCP providers backed by pinned Go binaries"
 requires-python = ">=3.11"
 

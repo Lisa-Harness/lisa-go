@@ -1,8 +1,8 @@
 # Go MCP provider pack
 
 This pack contributes Go implementations of Lisa's `storage`, `thread` and
-`memory` capabilities. Install it from the same pinned Go repository tag as
-the binary release:
+`memory` capabilities. Install it from a release tag; that tag is the only
+version selector:
 
 ```yaml
 resources:
@@ -11,7 +11,6 @@ resources:
     auto_install:
       lisa-pack-go-connectors:
         source: git+https://github.com/Lisa-Harness/lisa-go.git@v0.2.0#subdirectory=pack
-        pin: v0.2.0
 
 providers:
   capabilities:
@@ -20,14 +19,19 @@ providers:
     memory: lisa-pack-go-connectors
 ```
 
+The pack's version comes from the git tag it is built from (`hatch-vcs`), and
+its manifest omits `binary_download.version`, so Lisa downloads the binaries
+from the release matching the installed pack (`v<pack version>`). Installs
+from a branch or untagged commit get a development version with no matching
+release and fail at startup. Cutting a release is just pushing a `vX.Y.Z` tag.
+
 The runtime downloads only selected capability implementations. It verifies
 the release asset against `checksums.txt` and caches it under
 `<data_dir>/cache/mcp-binaries/`; subsequent starts use the verified cached
 file. The release workflow publishes Linux, macOS, and Windows
 `amd64`/`arm64` binaries when a `v*.*.*` tag is pushed.
 
-The pack manifest pins `v0.2.0`, whose release workflow builds fetch, storage,
-thread and memory for all six targets (24 binaries plus `checksums.txt`).
-Fetch is distributed as a standalone MCP server; this pack registers only
-the storage, thread and memory capabilities. `v0.1.0` contains only storage
-and thread binaries.
+Releases from `v0.2.0` build fetch, storage, thread and memory for all six
+targets. Fetch is distributed as a standalone MCP server; this pack registers
+only the storage, thread and memory capabilities. `v0.1.0` contains only
+storage and thread binaries.
