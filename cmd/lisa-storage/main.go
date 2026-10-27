@@ -6,8 +6,8 @@
 // change); spawned over stdio per the contract
 // (lisa/docs/GO_CONNECTOR_SDK.md).
 //
-// Tools (10 total): file I/O (8): read_file, read_file_range, write_file,
-// append_file, list_files, delete_file, stat_file, make_dir; model
+// Tools (11 total): file I/O (9): read_file, read_file_range, write_file,
+// append_file, edit_file, list_files, delete_file, stat_file, make_dir; model
 // manifests (2): read_model_manifest, write_model_manifest.
 //
 // Error contract: the backend returns json.dumps({"error": ...}) strings
@@ -56,6 +56,15 @@ type appendFileArgs struct {
 	Content string `json:"content"`
 }
 
+type editFileArgs struct {
+	Path           string `json:"path"`
+	OldString      string `json:"old_string"`
+	NewString      string `json:"new_string"`
+	ReplaceAll     bool   `json:"replace_all,omitempty"`
+	ExpectedSHA256 string `json:"expected_sha256,omitempty"`
+	Encoding       string `json:"encoding,omitempty"`
+}
+
 type listFilesArgs struct {
 	Prefix string `json:"prefix,omitempty"`
 }
@@ -99,7 +108,7 @@ var (
 	// Tool annotations matching the Python server's ToolAnnotations:
 	//   read_only_hint=True   for read_file, read_file_range, list_files,
 	//                         stat_file, read_model_manifest
-	//   destructive_hint=True for write_file, append_file, delete_file,
+	//   destructive_hint=True for write_file, append_file, edit_file, delete_file,
 	//                         make_dir, write_model_manifest
 	readOnlyAnnotations    = &mcp.ToolAnnotations{ReadOnlyHint: true}
 	destructiveAnnotations = &mcp.ToolAnnotations{DestructiveHint: &[]bool{true}[0]}
@@ -249,6 +258,36 @@ func main() {
 	})
 
 	server.AddTool(&mcp.Tool{
+		Name: "edit_file",
+		Description: "Replace one exact substring in an existing file in the files sandbox. " +
+			"Only the matched region changes; no newline normalization. " +
+			"Requires exactly one match unless replace_all is set. " +
+			"Use expected_sha256 from stat_file or a prior edit to reject stale content. " +
+			"Writes atomically and respects --readonly. " +
+			"Returns {ok, path, replacements, first_line, bytes_before, bytes_after, sha256}.",
+		InputSchema: rawSchema(`{
+			"type": "object",
+			"properties": {
+				"path": {"type": "string", "description": "Relative path within the files sandbox (no .. or absolute)."},
+				"old_string": {"type": "string", "description": "Exact nonempty text to replace, including indentation and line endings."},
+				"new_string": {"type": "string", "description": "Replacement text; may be empty to delete the match."},
+				"replace_all": {"type": "boolean", "default": false, "description": "Replace every occurrence instead of requiring exactly one."},
+				"expected_sha256": {"type": "string", "default": "", "description": "Optional content hash from stat_file or edit_file; rejects changed files."},
+				"encoding": {"type": "string", "default": "utf-8", "description": "Text encoding (UTF-8 only)."}
+			},
+			"required": ["path", "old_string", "new_string"]
+		}`),
+		Annotations: destructiveAnnotations,
+	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var args editFileArgs
+		if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
+			return nil, err
+		}
+		return raiseOnError(backend.EditFile(args.Path, args.OldString, args.NewString,
+			args.ReplaceAll, args.ExpectedSHA256, args.Encoding))
+	})
+
+	server.AddTool(&mcp.Tool{
 		Name: "list_files",
 		Description: "List files under a prefix in the files sandbox. " +
 			"Returns a JSON array of relative paths (forward slashes). " +
@@ -289,8 +328,9 @@ func main() {
 	})
 
 	server.AddTool(&mcp.Tool{
-		Name:        "stat_file",
-		Description: "Return file metadata (path, size, modified, is_dir) for a path.",
+		Name: "stat_file",
+		Description: "Return file metadata (path, size, modified, is_dir, sha256) for a path. " +
+			"The hash is empty for directories and can guard edit_file with expected_sha256.",
 		InputSchema: rawSchema(`{
 			"type": "object",
 			"properties": {

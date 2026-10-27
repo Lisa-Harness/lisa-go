@@ -35,3 +35,10 @@ Releases from `v0.2.0` build fetch, storage, thread and memory for all six
 targets. Fetch is distributed as a standalone MCP server; this pack registers
 only the storage, thread and memory capabilities. `v0.1.0` contains only
 storage and thread binaries.
+
+The storage provider includes `edit_file` in both its capability contract
+and default tools. It replaces exact text without newline normalization,
+rejects ambiguous matches unless `replace_all` is set, and accepts
+`expected_sha256` from `stat_file` or a prior edit to reject stale content.
+Edits preserve permissions and stage replacements atomically beside the target.
+The Go storage backend supports UTF-8 text only.

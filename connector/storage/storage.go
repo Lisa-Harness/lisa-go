@@ -16,6 +16,7 @@
 package storage
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -411,7 +412,8 @@ func (b *Backend) DeleteFile(path string) string {
 	return string(payload)
 }
 
-// StatFile returns file metadata (size, modified timestamp, is_dir).
+// StatFile returns file metadata (size, modified timestamp, is_dir, sha256).
+// The hash is empty for directories; file hashes can guard a later EditFile.
 func (b *Backend) StatFile(path string) string {
 	resolved, errStr := b.resolveOrError(path)
 	if errStr != "" {
@@ -421,11 +423,20 @@ func (b *Backend) StatFile(path string) string {
 	if err != nil {
 		return errJSON(fmt.Sprintf("not found: %s", path))
 	}
+	digest := ""
+	if info.Mode().IsRegular() {
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			return errJSON(fmt.Sprintf("read failed: %v", err))
+		}
+		digest = fmt.Sprintf("%x", sha256.Sum256(data))
+	}
 	payload, _ := json.Marshal(map[string]any{
 		"path":     path,
 		"size":     info.Size(),
 		"modified": info.ModTime().UTC().Format("2006-01-02T15:04:05.999999999+00:00"),
 		"is_dir":   info.IsDir(),
+		"sha256":   digest,
 	})
 	return string(payload)
 }

@@ -217,6 +217,7 @@ func TestReadonlyRejectsWrites(t *testing.T) {
 	for _, out := range []string{
 		b.WriteFile("w.txt", "nope"),
 		b.AppendFile("r.txt", "nope"),
+		b.EditFile("r.txt", "readable", "changed", false, "", ""),
 		b.DeleteFile("r.txt"),
 		b.MakeDir("sub"),
 		b.WriteModelManifest("models: []", "proposal"),

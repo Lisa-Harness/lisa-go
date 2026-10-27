@@ -99,7 +99,7 @@ func TestServerListsTools(t *testing.T) {
 		names[tool.Name] = true
 	}
 	want := []string{
-		"read_file", "read_file_range", "write_file", "append_file",
+		"read_file", "read_file_range", "write_file", "append_file", "edit_file",
 		"list_files", "delete_file", "stat_file", "make_dir",
 		"read_model_manifest", "write_model_manifest",
 	}
@@ -110,6 +110,35 @@ func TestServerListsTools(t *testing.T) {
 	}
 	if len(res.Tools) != len(want) {
 		t.Errorf("expected %d tools, got %d: %v", len(want), len(res.Tools), names)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != "edit_file" {
+			continue
+		}
+		if tool.Annotations == nil || tool.Annotations.ReadOnlyHint ||
+			tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint ||
+			tool.Annotations.IdempotentHint {
+			t.Errorf("edit_file must be destructive, non-idempotent, and not read-only: %+v", tool.Annotations)
+		}
+		schemaJSON, err := json.Marshal(tool.InputSchema)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		if err := json.Unmarshal(schemaJSON, &schema); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"path", "old_string", "new_string", "replace_all", "expected_sha256", "encoding"} {
+			if _, ok := schema.Properties[name]; !ok {
+				t.Errorf("edit_file schema missing %s", name)
+			}
+		}
+		if strings.Join(schema.Required, ",") != "path,old_string,new_string" {
+			t.Errorf("edit_file required arguments = %v", schema.Required)
+		}
 	}
 }
 
@@ -122,10 +151,14 @@ func TestPathTraversalRejected(t *testing.T) {
 
 	bad := []string{"../x", "ok/../../x", "/etc/passwd", `C:\Windows\system.ini`}
 	for _, p := range bad {
-		for _, tool := range []string{"read_file", "write_file", "delete_file", "stat_file"} {
+		for _, tool := range []string{"read_file", "write_file", "edit_file", "delete_file", "stat_file"} {
 			args := map[string]any{"path": p}
 			if tool == "write_file" {
 				args["content"] = "nope"
+			}
+			if tool == "edit_file" {
+				args["old_string"] = "old"
+				args["new_string"] = "new"
 			}
 			if out := callError(t, cs, tool, args); !strings.Contains(out, "rejected") {
 				t.Errorf("%s(%q): error %q does not mention rejection", tool, p, out)
@@ -157,6 +190,9 @@ func TestDenyGlobPolicy(t *testing.T) {
 	if out := callError(t, cs, "read_file", map[string]any{"path": "state.db"}); !strings.Contains(out, "denied") {
 		t.Errorf("read *.db: expected denial, got %q", out)
 	}
+	if out := callError(t, cs, "edit_file", map[string]any{"path": "state.DB", "old_string": "old", "new_string": "new"}); !strings.Contains(out, "denied") {
+		t.Errorf("edit *.DB: expected denial, got %q", out)
+	}
 
 	// Denied entries are filtered from listings; allowed files still work.
 	callText(t, cs, "write_file", map[string]any{"path": "ok.txt", "content": "fine"})
@@ -178,6 +214,77 @@ func TestReadonlyMode(t *testing.T) {
 
 	if out := callError(t, cs, "write_file", map[string]any{"path": "w.txt", "content": "nope"}); !strings.Contains(out, "server is read-only") {
 		t.Errorf("readonly write: expected \"server is read-only\", got %q", out)
+	}
+	if out := callError(t, cs, "edit_file", map[string]any{"path": "w.txt", "old_string": "old", "new_string": "new"}); !strings.Contains(out, "server is read-only") {
+		t.Errorf("readonly edit: expected rejection, got %q", out)
+	}
+}
+
+func TestEditFileRoundTrip(t *testing.T) {
+	t.Parallel()
+	cs := connect(t, buildBinary(t), t.TempDir())
+	callText(t, cs, "write_file", map[string]any{"path": "doc.md", "content": "keep\r\nsame\r\nsame\r\n"})
+	var stat struct {
+		SHA256 string `json:"sha256"`
+	}
+	if err := json.Unmarshal([]byte(callText(t, cs, "stat_file", map[string]any{"path": "doc.md"})), &stat); err != nil {
+		t.Fatal(err)
+	}
+	stale := stat.SHA256
+	if len(stale) != 64 {
+		t.Fatalf("stat_file missing sha256: %+v", stat)
+	}
+	args := map[string]any{
+		"path": "doc.md", "old_string": "same", "new_string": "changed",
+		"expected_sha256": stale,
+	}
+	if out := callError(t, cs, "edit_file", args); !strings.Contains(out, "occurs 2 times") {
+		t.Fatalf("ambiguous edit: %s", out)
+	}
+	if got := callText(t, cs, "read_file", map[string]any{"path": "doc.md"}); got != "keep\r\nsame\r\nsame\r\n" {
+		t.Fatalf("ambiguous edit changed file: %q", got)
+	}
+	args["replace_all"] = true
+	var receipt struct {
+		OK           bool   `json:"ok"`
+		Replacements int    `json:"replacements"`
+		FirstLine    int    `json:"first_line"`
+		BytesBefore  int    `json:"bytes_before"`
+		BytesAfter   int    `json:"bytes_after"`
+		SHA256       string `json:"sha256"`
+	}
+	out := callText(t, cs, "edit_file", args)
+	if err := json.Unmarshal([]byte(out), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if !receipt.OK || receipt.Replacements != 2 || receipt.FirstLine != 2 ||
+		receipt.BytesBefore != len("keep\r\nsame\r\nsame\r\n") ||
+		receipt.BytesAfter != len("keep\r\nchanged\r\nchanged\r\n") || receipt.SHA256 == stale {
+		t.Fatalf("unexpected edit receipt: %s", out)
+	}
+	if err := json.Unmarshal([]byte(callText(t, cs, "stat_file", map[string]any{"path": "doc.md"})), &stat); err != nil {
+		t.Fatal(err)
+	}
+	if receipt.SHA256 != stat.SHA256 {
+		t.Fatalf("edit hash %q differs from stat hash %q", receipt.SHA256, stat.SHA256)
+	}
+	args["old_string"], args["new_string"] = "changed", "bad"
+	if out := callError(t, cs, "edit_file", args); !strings.Contains(out, "sha256 mismatch") {
+		t.Fatalf("stale edit: %s", out)
+	}
+	callText(t, cs, "edit_file", map[string]any{
+		"path": "doc.md", "old_string": "keep\r\n", "new_string": "", "expected_sha256": stat.SHA256,
+	})
+	if got := callText(t, cs, "read_file", map[string]any{"path": "doc.md"}); got != "changed\r\nchanged\r\n" {
+		t.Fatalf("edited bytes = %q", got)
+	}
+	for _, args := range []map[string]any{
+		{"path": "doc.md", "old_string": "absent", "new_string": "new"},
+		{"path": "doc.md", "old_string": "", "new_string": "new"},
+		{"path": "doc.md", "old_string": "changed", "new_string": "changed"},
+		{"path": "doc.md", "old_string": "changed"},
+	} {
+		callError(t, cs, "edit_file", args)
 	}
 }
 
