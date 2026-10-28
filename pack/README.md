@@ -25,6 +25,18 @@ from the release matching the installed pack (`v<pack version>`). Installs
 from a branch or untagged commit get a development version with no matching
 release and fail at startup. Cutting a release is just pushing a `vX.Y.Z` tag.
 
+If startup reports a development pack version despite installing from a release
+tag, a cached build may predate the tag on that commit. Rebuild just the pack
+without reusing the cache (adjust the data directory and release tag as needed):
+
+```sh
+uv --no-cache pip install --python ~/.lisa/venv/bin/python --no-deps \
+  --reinstall-package lisa-pack-go-connectors \
+  'git+https://github.com/Lisa-Harness/lisa-go.git@v0.2.1#subdirectory=pack'
+```
+
+Then run `lisa mcp lisa-storage-go` to verify startup and tool discovery.
+
 The runtime downloads only selected capability implementations. It verifies
 the release asset against `checksums.txt` and caches it under
 `<data_dir>/cache/mcp-binaries/`; subsequent starts use the verified cached
