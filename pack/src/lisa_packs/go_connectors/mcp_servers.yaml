@@ -1,6 +1,6 @@
 version: 1
 
-# Select these implementations with providers.capabilities.storage/thread/memory.
+# Select these implementations with providers.capabilities.storage/thread/memory/fetch.
 # The runtime downloads the release tagged with this pack's installed version
 # (v<version>) on first start, verifies it against checksums.txt, and keeps it
 # under the host cache directory. Install the pack from a vX.Y.Z tag.
@@ -102,3 +102,18 @@ servers:
     proxy_policy:
       ambient:
         user_slug: user_slug
+
+  # fetch_page delegates to fetch.fetch_url, so selecting this server swaps
+  # the HTTP fetcher and its cache (under files/_fetch) for the whole session.
+  # No ambient tools: the model reaches it only through fetch_page.
+  - server_id: lisa-fetch-go
+    capability: fetch
+    capability_tools:
+      - fetch_url
+      - invalidate_fetch_cache
+    runtime_kind: binary
+    binary_download:
+      repository: Lisa-Harness/lisa-go
+      binary_name: lisa-fetch
+    warm: false
+    data_dir_subdir: "."
