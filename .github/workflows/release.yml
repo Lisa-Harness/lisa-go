@@ -18,8 +18,11 @@ jobs:
           go-version-file: go.mod
       - run: go test ./...
 
+  conformance:
+    uses: ./.github/workflows/conformance.yml
+
   build:
-    needs: test
+    needs: [test, conformance]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

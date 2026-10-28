@@ -26,7 +26,7 @@ jobs:
 
       - name: Format check
         run: |
-          $unformatted = gofmt -l .\cmd .\connector
+          $unformatted = gofmt -l .\cmd .\connector .\conformance
           if ($unformatted) {
             Write-Host "gofmt would change:"
             $unformatted

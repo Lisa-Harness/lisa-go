@@ -1,0 +1,100 @@
+name: conformance
+
+# Differential Python ↔ Go server conformance. Event-driven only:
+#   - push to a conformance/** branch     → iterate on parity without releasing
+#   - called by release.yml on a v* tag   → gate release assets
+#   - repository_dispatch "lisa-changed"  → canonical lisa changed upstream
+#   - workflow_dispatch                   → test an explicit lisa ref
+# The canonical revision defaults to conformance/LISA_REF; dispatches may
+# override it. Nothing here publishes anything.
+
+on:
+  push:
+    branches: ["conformance/**"]
+  workflow_call:
+    inputs:
+      lisa_ref:
+        description: Canonical lisa commit/ref (default conformance/LISA_REF)
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      lisa_ref:
+        description: Canonical lisa commit/ref (default conformance/LISA_REF)
+        type: string
+        default: ""
+  repository_dispatch:
+    types: [lisa-changed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conformance-${{ github.workflow }}-${{ github.ref }}-${{ github.event.client_payload.lisa_sha || inputs.lisa_ref || 'pinned' }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/heads/conformance/') }}
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve canonical lisa ref
+        id: ref
+        env:
+          INPUT_REF: ${{ inputs.lisa_ref }}
+          DISPATCH_SHA: ${{ github.event.client_payload.lisa_sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "repository_dispatch" ]; then
+            if ! printf '%s' "$DISPATCH_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::repository_dispatch requires client_payload.lisa_sha (full commit SHA)"
+              exit 1
+            fi
+            ref="$DISPATCH_SHA"; source="upstream dispatch"
+          elif [ -n "$INPUT_REF" ]; then
+            ref="$INPUT_REF"; source="explicit input"
+          else
+            ref="$(tr -d '[:space:]' < conformance/LISA_REF)"; source="conformance/LISA_REF"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Lisa-Harness/lisa
+          ref: ${{ steps.ref.outputs.ref }}
+          path: .lisa-ref
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: .lisa-ref/uv.lock
+
+      - name: Run conformance
+        run: |
+          uv python install "$UV_PYTHON"
+          scripts/conformance.sh .lisa-ref
+
+      - name: Summary
+        if: always()
+        env:
+          REF_SOURCE: ${{ steps.ref.outputs.source }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          lisa_sha="$(git -C .lisa-ref rev-parse HEAD 2>/dev/null || echo unresolved)"
+          {
+            echo "### Conformance: $JOB_STATUS"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Trigger | \`$GITHUB_EVENT_NAME\` on \`$GITHUB_REF\` |"
+            echo "| lisa-go | \`$GITHUB_SHA\` |"
+            echo "| canonical lisa | \`$lisa_sha\` ($REF_SOURCE) |"
+          } >> "$GITHUB_STEP_SUMMARY"
