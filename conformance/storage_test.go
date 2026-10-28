@@ -97,6 +97,7 @@ func TestStorageModelManifests(t *testing.T) {
 	runDifferential(t, ref, port, []step{
 		{"read missing proposal", "read_model_manifest", map[string]any{}},
 		{"read invalid kind", "read_model_manifest", map[string]any{"which": "bogus"}},
+		{"read invalid kind quoted", "read_model_manifest", map[string]any{"which": `it's "x"\n`}},
 		{"write proposal", "write_model_manifest", map[string]any{"content": "models:\n  - id: a\n"}},
 		{"read proposal", "read_model_manifest", map[string]any{"which": "proposal"}},
 		{"write active", "write_model_manifest", map[string]any{"content": "models: []\n", "which": "active"}},

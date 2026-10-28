@@ -168,7 +168,39 @@ func (b *Backend) ManifestPath(which string) (string, error) {
 	case "proposal":
 		return filepath.Join(b.dataDir, stateDirName, "models.proposed.yaml"), nil
 	}
-	return "", fmt.Errorf("manifest kind must be 'active' or 'proposal', got %q", which)
+	return "", fmt.Errorf("manifest kind must be 'active' or 'proposal', got %s", pyRepr(which))
+}
+
+// pyRepr renders s like Python's repr(str), so error text matches the
+// reference backend's {which!r} formatting byte-for-byte.
+func pyRepr(s string) string {
+	quote := byte('\'')
+	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+		quote = '"'
+	}
+	var b strings.Builder
+	b.WriteByte(quote)
+	for _, r := range s {
+		switch {
+		case r == '\\':
+			b.WriteString(`\\`)
+		case r == rune(quote):
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, `\x%02x`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte(quote)
+	return b.String()
 }
 
 // DeniedByPolicy reports whether the normalized relative path matches any
@@ -486,7 +518,8 @@ func (b *Backend) ReadFileRange(path string, start, length int, encoding string)
 	s := max(0, start)
 	n := max(0, length)
 	end := min(total, s+n)
-	content := string(text[s:end])
+	// A start past EOF yields an empty slice (Python semantics), not a panic.
+	content := string(text[min(s, end):end])
 	payload, _ := json.Marshal(map[string]any{
 		"content": content,
 		"start":   s,

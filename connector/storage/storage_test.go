@@ -301,3 +301,49 @@ func TestModelManifestRoundTrip(t *testing.T) {
 		t.Errorf("active manifest not written under config/: %v", err)
 	}
 }
+
+// TestReadFileRangePastEOF pins Python parity for a start beyond the end:
+// an empty slice with the requested start echoed and eof=true. It used to
+// panic (slice bounds), killing the whole stdio server.
+func TestReadFileRangePastEOF(t *testing.T) {
+	b := newBackend(t, nil)
+	b.WriteFile("a.txt", "hello\n")
+	var got map[string]any
+	if err := json.Unmarshal([]byte(b.ReadFileRange("a.txt", 1000, 5, "")), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["content"] != "" || got["start"] != float64(1000) || got["length"] != float64(0) ||
+		got["total"] != float64(6) || got["eof"] != true {
+		t.Fatalf("unexpected past-EOF payload: %v", got)
+	}
+}
+
+// TestModelManifestInvalidKindMessage pins the Python wording ({which!r})
+// that the conformance suite compares verbatim.
+func TestModelManifestInvalidKindMessage(t *testing.T) {
+	b := newBackend(t, nil)
+	mustError(t, b.ReadModelManifest("bogus"), "manifest kind must be 'active' or 'proposal', got 'bogus'")
+}
+
+// TestPyRepr pins Python repr(str) output captured from CPython.
+func TestPyRepr(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, in, want string }{
+		{"plain", "bogus", `'bogus'`},
+		{"single quote", "it's", `"it's"`},
+		{"double quote", `say "hi"`, `'say "hi"'`},
+		{"both quotes", `both '"`, `'both \'"'`},
+		{"backslash", `back\slash`, `'back\\slash'`},
+		{"whitespace escapes", "tab\there\nnl", `'tab\there\nnl'`},
+		{"printable unicode", "é世🌍", `'é世🌍'`},
+		{"control bytes", "\x00\x7f", `'\x00\x7f'`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := pyRepr(tc.in); got != tc.want {
+				t.Errorf("pyRepr(%q) = %s, want %s", tc.in, got, tc.want)
+			}
+		})
+	}
+}
